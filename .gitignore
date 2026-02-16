@@ -5,6 +5,8 @@ test/
 scripts/
 package.json
 package-lock.json
+build-engine.mjs
+engine-dist/
 !dist/
 *.log
 .DS_Store

@@ -29820,6 +29820,25 @@ function wrappy (fn, cb) {
 
 /***/ }),
 
+/***/ 1356:
+/***/ ((module) => {
+
+function webpackEmptyAsyncContext(req) {
+	// Here Promise.resolve().then() is used instead of new Promise() to prevent
+	// uncaught exception popping up in devtools
+	return Promise.resolve().then(() => {
+		var e = new Error("Cannot find module '" + req + "'");
+		e.code = 'MODULE_NOT_FOUND';
+		throw e;
+	});
+}
+webpackEmptyAsyncContext.keys = () => ([]);
+webpackEmptyAsyncContext.resolve = webpackEmptyAsyncContext;
+webpackEmptyAsyncContext.id = 1356;
+module.exports = webpackEmptyAsyncContext;
+
+/***/ }),
+
 /***/ 2613:
 /***/ ((module) => {
 
@@ -29925,45 +29944,10 @@ module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:events"
 
 /***/ }),
 
-/***/ 3024:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:fs");
-
-/***/ }),
-
-/***/ 1455:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:fs/promises");
-
-/***/ }),
-
-/***/ 6760:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:path");
-
-/***/ }),
-
 /***/ 7075:
 /***/ ((module) => {
 
 module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:stream");
-
-/***/ }),
-
-/***/ 6193:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:string_decoder");
-
-/***/ }),
-
-/***/ 3136:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:url");
 
 /***/ }),
 
@@ -30034,13 +30018,6 @@ module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("timers");
 /***/ ((module) => {
 
 module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("tls");
-
-/***/ }),
-
-/***/ 2018:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("tty");
 
 /***/ }),
 
@@ -31706,8 +31683,8 @@ module.exports = parseParams
 /******/ 	}
 /******/ 	// Create a new module (and put it into the cache)
 /******/ 	var module = __webpack_module_cache__[moduleId] = {
-/******/ 		id: moduleId,
-/******/ 		loaded: false,
+/******/ 		// no module.id needed
+/******/ 		// no module.loaded needed
 /******/ 		exports: {}
 /******/ 	};
 /******/ 
@@ -31719,9 +31696,6 @@ module.exports = parseParams
 /******/ 	} finally {
 /******/ 		if(threw) delete __webpack_module_cache__[moduleId];
 /******/ 	}
-/******/ 
-/******/ 	// Flag the module as loaded
-/******/ 	module.loaded = true;
 /******/ 
 /******/ 	// Return the exports of the module
 /******/ 	return module.exports;
@@ -31811,15 +31785,6 @@ module.exports = parseParams
 /******/ 	};
 /******/ })();
 /******/ 
-/******/ /* webpack/runtime/node module decorator */
-/******/ (() => {
-/******/ 	__nccwpck_require__.nmd = (module) => {
-/******/ 		module.paths = [];
-/******/ 		if (!module.children) module.children = [];
-/******/ 		return module;
-/******/ 	};
-/******/ })();
-/******/ 
 /******/ /* webpack/runtime/compat */
 /******/ 
 /******/ if (typeof __nccwpck_require__ !== 'undefined') __nccwpck_require__.ab = new URL('.', import.meta.url).pathname.slice(import.meta.url.match(/^file:\/\/\/\w:/) ? 1 : 0, -1) + "/";
@@ -31894,39 +31859,88 @@ var __webpack_exports__ = {};
 var core = __nccwpck_require__(7484);
 // EXTERNAL MODULE: ./node_modules/@actions/github/lib/github.js
 var github = __nccwpck_require__(3228);
-// EXTERNAL MODULE: external "node:path"
-var external_node_path_ = __nccwpck_require__(6760);
-// EXTERNAL MODULE: external "node:fs"
-var external_node_fs_ = __nccwpck_require__(3024);
+;// CONCATENATED MODULE: external "node:path"
+const external_node_path_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:path");
+;// CONCATENATED MODULE: external "node:fs"
+const external_node_fs_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:fs");
+;// CONCATENATED MODULE: external "node:os"
+const external_node_os_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:os");
+;// CONCATENATED MODULE: external "node:https"
+const external_node_https_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:https");
 ;// CONCATENATED MODULE: ./src/scanner.mjs
 // src/scanner.mjs
-// Thin wrapper around scanDeadCode() for GitHub Actions context
+// Downloads and runs the scanner engine at runtime — no engine code in this repo
 
 
 
 
 
+
+
+const ENGINE_BASE = 'https://downloads.swynx.io/action';
+const ENGINE_DIR = (0,external_node_path_namespaceObject.join)((0,external_node_os_namespaceObject.tmpdir)(), 'swynx-engine');
+
+/**
+ * Download a file from URL to local path
+ */
+function download(url) {
+  return new Promise((resolve, reject) => {
+    external_node_https_namespaceObject.get(url, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        return download(res.headers.location).then(resolve, reject);
+      }
+      if (res.statusCode !== 200) {
+        return reject(new Error(`Download failed: ${url} (${res.statusCode})`));
+      }
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => resolve(Buffer.concat(chunks)));
+      res.on('error', reject);
+    }).on('error', reject);
+  });
+}
+
+/**
+ * Download engine files if not already cached
+ */
+async function ensureEngine() {
+  (0,external_node_fs_namespaceObject.mkdirSync)(ENGINE_DIR, { recursive: true });
+
+  const scannerPath = (0,external_node_path_namespaceObject.join)(ENGINE_DIR, 'scanner-engine.mjs');
+  const securityPath = (0,external_node_path_namespaceObject.join)(ENGINE_DIR, 'security-engine.mjs');
+
+  if (!(0,external_node_fs_namespaceObject.existsSync)(scannerPath)) {
+    core.info('Downloading scanner engine...');
+    const data = await download(`${ENGINE_BASE}/scanner-engine.mjs`);
+    (0,external_node_fs_namespaceObject.writeFileSync)(scannerPath, data);
+  }
+
+  if (!(0,external_node_fs_namespaceObject.existsSync)(securityPath)) {
+    core.info('Downloading security engine...');
+    const data = await download(`${ENGINE_BASE}/security-engine.mjs`);
+    (0,external_node_fs_namespaceObject.writeFileSync)(securityPath, data);
+  }
+
+  return { scannerPath, securityPath };
+}
 
 /**
  * Run the dead code scanner
- *
- * @param {string} projectPath - Absolute path to project
- * @param {object} options - { security: boolean }
- * @returns {Promise<{ results: object, security: object|null }>}
  */
 async function runScan(projectPath, options = {}) {
-  const absPath = (0,external_node_path_.resolve)(projectPath);
+  const absPath = (0,external_node_path_namespaceObject.resolve)(projectPath);
 
-  if (!(0,external_node_fs_.existsSync)(absPath)) {
+  if (!(0,external_node_fs_namespaceObject.existsSync)(absPath)) {
     throw new Error(`Path not found: ${absPath}`);
   }
 
   core.info(`Scanning ${absPath}...`);
 
-  // Force single-threaded to avoid worker bundling issues in ncc
+  // Force single-threaded to avoid worker issues in Actions
   process.env.SWYNX_WORKERS = '1';
 
-  const { scanDeadCode } = await Promise.all(/* import() */[__nccwpck_require__.e(611), __nccwpck_require__.e(67), __nccwpck_require__.e(105), __nccwpck_require__.e(719)]).then(__nccwpck_require__.bind(__nccwpck_require__, 2719));
+  const { scannerPath, securityPath } = await ensureEngine();
+  const { scanDeadCode } = await __nccwpck_require__(1356)(scannerPath);
 
   const results = await scanDeadCode(absPath, {
     onProgress: (p) => {
@@ -31949,7 +31963,7 @@ async function runScan(projectPath, options = {}) {
   // Security scan
   let security = null;
   if (options.security !== false) {
-    security = await runSecurityScan(absPath, results);
+    security = await runSecurityScan(absPath, results, securityPath);
   }
 
   return { results, security };
@@ -31961,20 +31975,18 @@ async function runScan(projectPath, options = {}) {
 async function applyConfigIgnore(projectPath, results) {
   let ignore = [];
 
-  // Load .swynx-lite.json
-  const configPath = (0,external_node_path_.join)(projectPath, '.swynx-lite.json');
-  if ((0,external_node_fs_.existsSync)(configPath)) {
+  const configPath = (0,external_node_path_namespaceObject.join)(projectPath, '.swynx-lite.json');
+  if ((0,external_node_fs_namespaceObject.existsSync)(configPath)) {
     try {
-      const cfg = JSON.parse((0,external_node_fs_.readFileSync)(configPath, 'utf-8'));
+      const cfg = JSON.parse((0,external_node_fs_namespaceObject.readFileSync)(configPath, 'utf-8'));
       if (Array.isArray(cfg.ignore)) ignore.push(...cfg.ignore);
     } catch { /* invalid config — skip */ }
   }
 
-  // Load .swynxignore
-  const ignorePath = (0,external_node_path_.join)(projectPath, '.swynxignore');
-  if ((0,external_node_fs_.existsSync)(ignorePath)) {
+  const ignorePath = (0,external_node_path_namespaceObject.join)(projectPath, '.swynxignore');
+  if ((0,external_node_fs_namespaceObject.existsSync)(ignorePath)) {
     try {
-      const lines = (0,external_node_fs_.readFileSync)(ignorePath, 'utf-8')
+      const lines = (0,external_node_fs_namespaceObject.readFileSync)(ignorePath, 'utf-8')
         .split('\n')
         .map(l => l.trim())
         .filter(l => l && !l.startsWith('#'));
@@ -31984,14 +31996,13 @@ async function applyConfigIgnore(projectPath, results) {
 
   if (ignore.length === 0) return;
 
-  // Try to load minimatch
   let minimatch;
   try {
-    const mod = await __nccwpck_require__.e(/* import() */ 611).then(__nccwpck_require__.bind(__nccwpck_require__, 4611));
+    const mod = await __nccwpck_require__.e(/* import() */ 63).then(__nccwpck_require__.t.bind(__nccwpck_require__, 2063, 19));
     minimatch = mod.minimatch || mod.default;
   } catch {
     try {
-      const g = await Promise.all(/* import() */[__nccwpck_require__.e(611), __nccwpck_require__.e(67)]).then(__nccwpck_require__.bind(__nccwpck_require__, 9067));
+      const g = await __nccwpck_require__.e(/* import() */ 239).then(__nccwpck_require__.t.bind(__nccwpck_require__, 8239, 19));
       minimatch = g.minimatch;
     } catch {
       core.warning('Could not load minimatch — .swynxignore patterns may not work');
@@ -32009,7 +32020,6 @@ async function applyConfigIgnore(projectPath, results) {
     results.partialFiles = results.partialFiles.filter(filterFn);
   }
 
-  // Recalculate summary
   const deadCount = results.deadFiles.length;
   const totalDeadBytes = results.deadFiles.reduce((sum, f) => sum + (f.size || 0), 0);
   const deadRate = results.summary.totalFiles > 0
@@ -32024,9 +32034,9 @@ async function applyConfigIgnore(projectPath, results) {
 /**
  * Run security scan on dead files
  */
-async function runSecurityScan(projectPath, scanResults) {
+async function runSecurityScan(projectPath, scanResults, securityPath) {
   try {
-    const { scanCodePatterns } = await __nccwpck_require__.e(/* import() */ 744).then(__nccwpck_require__.bind(__nccwpck_require__, 4744));
+    const { scanCodePatterns } = await __nccwpck_require__(1356)(securityPath);
 
     const deadFileSet = new Set(
       (scanResults.deadFiles || []).map(f => f.file || f.path || '')
@@ -32037,16 +32047,15 @@ async function runSecurityScan(projectPath, scanResults) {
       const filePath = f.file || f.path || '';
       if (!filePath) continue;
 
-      const fullPath = (0,external_node_path_.join)(projectPath, filePath);
+      const fullPath = (0,external_node_path_namespaceObject.join)(projectPath, filePath);
       let content = '';
       try {
-        if ((0,external_node_fs_.existsSync)(fullPath)) {
-          content = (0,external_node_fs_.readFileSync)(fullPath, 'utf-8');
+        if ((0,external_node_fs_namespaceObject.existsSync)(fullPath)) {
+          content = (0,external_node_fs_namespaceObject.readFileSync)(fullPath, 'utf-8');
         }
       } catch { continue; }
 
       if (!content) continue;
-
       allFiles.push({ file: filePath, relativePath: filePath, content });
     }
 
@@ -32568,7 +32577,7 @@ function generateSARIF({ deadFiles, newDeadFiles, security, summary }) {
  * @param {string} outputPath - File path
  */
 function writeSARIF(sarif, outputPath) {
-  (0,external_node_fs_.writeFileSync)(outputPath, JSON.stringify(sarif, null, 2));
+  (0,external_node_fs_namespaceObject.writeFileSync)(outputPath, JSON.stringify(sarif, null, 2));
   core.info(`SARIF output written to ${outputPath}`);
 }
 
@@ -32792,7 +32801,7 @@ async function run() {
     const tier = await validateLicense(licenseKey, { owner, repo, isPrivate });
 
     // ── Scan ──────────────────────────────────────────────────
-    const projectPath = (0,external_node_path_.resolve)(process.env.GITHUB_WORKSPACE || process.cwd(), scanPath);
+    const projectPath = (0,external_node_path_namespaceObject.resolve)(process.env.GITHUB_WORKSPACE || process.cwd(), scanPath);
     const { results, security } = await runScan(projectPath, {
       security: securityEnabled,
     });
