@@ -1,0 +1,10 @@
+node_modules/
+shared/
+src/
+test/
+scripts/
+package.json
+package-lock.json
+!dist/
+*.log
+.DS_Store

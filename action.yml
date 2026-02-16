@@ -1,0 +1,52 @@
+name: 'Swynx Dead Code Detection'
+description: 'Detect and prevent dead code in pull requests. Scans 35 languages, posts PR comments, blocks merge on new dead code.'
+author: 'Swynx'
+branding:
+  icon: 'trash-2'
+  color: 'orange'
+
+inputs:
+  path:
+    description: 'Path to scan (relative to repo root)'
+    default: '.'
+  threshold:
+    description: 'Max allowed dead code rate (%). Fails if exceeded.'
+    default: '0'
+  fail-on-new-dead-code:
+    description: 'Fail if the PR introduces new dead files'
+    default: 'true'
+  post-comment:
+    description: 'Post a summary comment on the PR'
+    default: 'true'
+  inline-comments:
+    description: 'Leave inline review comments on new dead files'
+    default: 'false'
+  security:
+    description: 'Enable security scanning of dead code'
+    default: 'true'
+  sarif:
+    description: 'Generate SARIF output for Code Scanning'
+    default: 'false'
+  sarif-file:
+    description: 'SARIF output path'
+    default: 'swynx-results.sarif'
+  token:
+    description: 'GitHub token for PR comments'
+    default: ${{ github.token }}
+  license-key:
+    description: 'Swynx license key (optional, unlocks paid features)'
+    default: ''
+
+outputs:
+  dead-files:
+    description: 'Total dead files found'
+  dead-rate:
+    description: 'Dead code percentage'
+  new-dead-files:
+    description: 'Dead files introduced by this PR'
+  security-findings:
+    description: 'Security findings in dead code'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.mjs'
