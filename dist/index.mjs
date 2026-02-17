@@ -29820,25 +29820,6 @@ function wrappy (fn, cb) {
 
 /***/ }),
 
-/***/ 1356:
-/***/ ((module) => {
-
-function webpackEmptyAsyncContext(req) {
-	// Here Promise.resolve().then() is used instead of new Promise() to prevent
-	// uncaught exception popping up in devtools
-	return Promise.resolve().then(() => {
-		var e = new Error("Cannot find module '" + req + "'");
-		e.code = 'MODULE_NOT_FOUND';
-		throw e;
-	});
-}
-webpackEmptyAsyncContext.keys = () => ([]);
-webpackEmptyAsyncContext.resolve = webpackEmptyAsyncContext;
-webpackEmptyAsyncContext.id = 1356;
-module.exports = webpackEmptyAsyncContext;
-
-/***/ }),
-
 /***/ 2613:
 /***/ ((module) => {
 
@@ -31880,6 +31861,11 @@ const external_node_https_namespaceObject = __WEBPACK_EXTERNAL_createRequire(imp
 const ENGINE_BASE = 'https://downloads.swynx.io/action';
 const ENGINE_DIR = (0,external_node_path_namespaceObject.join)((0,external_node_os_namespaceObject.tmpdir)(), 'swynx-engine');
 
+// Dynamic import helper — prevents ncc/webpack from replacing import() with
+// its own module resolver (webpackEmptyAsyncContext) which always throws
+// "Cannot find module". We need real dynamic import for runtime-downloaded engines.
+const dynamicImport = new Function('specifier', 'return import(specifier)');
+
 /**
  * Download a file from URL to local path
  */
@@ -31940,7 +31926,7 @@ async function runScan(projectPath, options = {}) {
   process.env.SWYNX_WORKERS = '1';
 
   const { scannerPath, securityPath } = await ensureEngine();
-  const { scanDeadCode } = await __nccwpck_require__(1356)(scannerPath);
+  const { scanDeadCode } = await dynamicImport(scannerPath);
 
   const results = await scanDeadCode(absPath, {
     onProgress: (p) => {
@@ -32036,7 +32022,7 @@ async function applyConfigIgnore(projectPath, results) {
  */
 async function runSecurityScan(projectPath, scanResults, securityPath) {
   try {
-    const { scanCodePatterns } = await __nccwpck_require__(1356)(securityPath);
+    const { scanCodePatterns } = await dynamicImport(securityPath);
 
     const deadFileSet = new Set(
       (scanResults.deadFiles || []).map(f => f.file || f.path || '')
