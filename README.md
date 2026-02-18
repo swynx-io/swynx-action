@@ -1,6 +1,6 @@
-# Swynx — Dead Code Detection for Pull Requests
+# Swynx — CWE-561 Security Scanner for Pull Requests
 
-> Catch dead code before it ships. Scans **35 languages**, posts actionable PR comments, and blocks merge on new dead code.
+> Dead code is a **catalogued security weakness** ([CWE-561](https://cwe.mitre.org/data/definitions/561.html)). Swynx finds it before it ships. Scans **35 languages**, posts actionable PR comments, and blocks merge on new dead code.
 
 [![GitHub Marketplace](https://img.shields.io/badge/GitHub-Marketplace-blue?logo=github)](https://github.com/marketplace/swynx)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -11,15 +11,28 @@
 
 ---
 
+## Why dead code is a security problem
+
+Dead code isn't just technical debt — it's a formally catalogued security weakness:
+
+- **[CWE-561](https://cwe.mitre.org/data/definitions/561.html)** — Dead Code (MITRE)
+- **[CWE-1164](https://cwe.mitre.org/data/definitions/1164.html)** — Irrelevant Code (MITRE)
+
+Dead code is **hidden attack surface**: unreviewed, unpatched, untested code that ships in production. Security scanners focus on live code paths — dead code sits in a blind spot.
+
+**Real-world example:** Apple's goto fail bug ([CVE-2014-1266](https://nvd.nist.gov/vuln/detail/CVE-2014-1266)) — a duplicated `goto fail;` line made SSL certificate verification dead code, bypassing TLS validation on **500 million+ devices**. A dead code scanner would have flagged the unreachable verification logic immediately.
+
+---
+
 ## What it does
 
 On every pull request, Swynx:
 
-1. **Scans** your entire codebase for dead files — files unreachable from any entry point
-2. **Diffs** against the base branch to classify dead files as **new in this PR** vs pre-existing
-3. **Posts** a clear summary comment on the PR with metrics and file tables
-4. **Blocks merge** if the PR introduces new dead code (configurable)
-5. **Scans dead code for security vulnerabilities** — CWE patterns like injection, XSS, and file upload in unreachable files
+1. **Scans for CWE-561 vulnerabilities** — finds files unreachable from any entry point across 35 languages
+2. **Detects security patterns in dead code** — injection, XSS, file upload, and other CWE patterns hiding in unreachable files
+3. **Diffs** against the base branch to classify dead files as **new in this PR** vs pre-existing
+4. **Posts** a clear summary comment on the PR with metrics and file tables
+5. **Blocks merge** if the PR introduces new dead code (configurable)
 
 ### Example PR comment
 
@@ -90,6 +103,7 @@ That's it. No config files, no API keys, no setup. Entry points are auto-detecte
 | `security` | `true` | Enable security scanning of dead code |
 | `sarif` | `false` | Generate SARIF output for Code Scanning tab (Team) |
 | `sarif-file` | `swynx-results.sarif` | SARIF output file path |
+| `exclude` | `''` | Comma-separated glob patterns to exclude (e.g. `newsletters/**,scripts/**`) |
 | `token` | `${{ github.token }}` | GitHub token for PR comments |
 | `license-key` | `''` | Swynx license key (unlocks paid features) |
 
@@ -176,6 +190,7 @@ Upload results to the Security tab alongside CodeQL findings:
     security: true
     sarif: true
     sarif-file: swynx-results.sarif
+    exclude: 'newsletters/**,scripts/**'
     license-key: ${{ secrets.SWYNX_LICENSE }}
 ```
 
@@ -199,21 +214,57 @@ Tested across **3,000,000+ files** in open source projects with **99.99% accurac
 1. **Discovery** — Walks every source file in the repo, respecting `.swynxignore` and `.swynx-lite.json`
 2. **Entry point detection** — Auto-detects from `package.json` (main/module/exports/bin), build configs (vite, webpack, tsconfig), HTML files, and 50+ framework conventions (Next.js pages, Django views, Rails controllers, NestJS modules, etc.)
 3. **Import graph** — Builds a complete dependency graph from imports, requires, and dynamic imports
-4. **BFS reachability** — Traverses from every entry point. Files not reached = dead
+4. **BFS reachability** — Traverses from every entry point. Files not reached = dead (CWE-561)
 5. **PR diff classification** — Compares against `git diff` to distinguish new dead code from pre-existing
-6. **Security scanning** — Checks dead files for CWE vulnerability patterns (injection, XSS, file upload, etc.)
+6. **Security scanning** — Checks dead files for additional CWE vulnerability patterns (injection, XSS, file upload, etc.)
 
 **No configuration required.** The scanner auto-detects entry points, resolves path aliases, handles monorepo workspaces, and understands framework conventions out of the box.
 
 ---
 
-## Configuration files
+## Excluding files
 
-### `.swynx-lite.json`
+Three ways to exclude files from dead code detection:
+
+### 1. `exclude` input (quickest)
+
+Add patterns directly in your workflow — no extra files needed:
+
+```yaml
+- uses: swynx-io/swynx-action@v1
+  with:
+    exclude: 'newsletters/**,scripts/**,**/*.stories.*'
+```
+
+### 2. `.swynxignore` file (gitignore-style)
+
+Create a `.swynxignore` file in your repo root. Uses the same syntax as `.gitignore`:
+
+```
+# Email templates (injected by mail client, not imported)
+newsletters/
+email-templates/
+
+# Test files
+__tests__/
+*.test.*
+*.spec.*
+
+# Build artifacts
+scripts/
+docs/
+dist/
+coverage/
+```
+
+### 3. `.swynx-lite.json` config (structured)
+
+Add an `"ignore"` array to `.swynx-lite.json` in your repo root:
 
 ```json
 {
   "ignore": [
+    "newsletters/**",
     "**/__tests__/**",
     "**/*.test.*",
     "**/*.spec.*",
@@ -223,26 +274,16 @@ Tested across **3,000,000+ files** in open source projects with **99.99% accurac
 }
 ```
 
-### `.swynxignore`
-
-Gitignore-style patterns:
-
-```
-__tests__/
-*.test.*
-*.spec.*
-scripts/
-docs/
-dist/
-coverage/
-```
+All three methods can be combined — patterns from all sources are merged.
 
 ---
 
 ## Security scanning
 
-Dead code with security vulnerabilities is a hidden attack surface. Swynx detects CWE patterns including:
+Dead code is a hidden attack surface — unreviewed, unpatched, untested code that ships in production. Swynx detects CWE patterns in dead files including:
 
+- **CWE-561** — Dead code (unreachable files)
+- **CWE-1164** — Irrelevant code
 - **CWE-78** — OS command injection
 - **CWE-79** — Cross-site scripting (XSS)
 - **CWE-89** — SQL injection

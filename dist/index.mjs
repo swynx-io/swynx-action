@@ -32015,6 +32015,11 @@ async function applyConfigIgnore(projectPath, results) {
     } catch { /* skip */ }
   }
 
+  const excludeInput = core.getInput('exclude') || '';
+  if (excludeInput) {
+    ignore.push(...excludeInput.split(',').map(p => p.trim()).filter(Boolean));
+  }
+
   if (ignore.length === 0) return;
 
   let minimatch;
@@ -32194,11 +32199,12 @@ const MARKER = '<!-- swynx-action -->';
  * @param {object} params.summary - Scan summary
  * @param {Array}  params.newDeadFiles - New dead files from this PR
  * @param {Array}  params.existingDeadFiles - Pre-existing dead files
+ * @param {Array}  params.partialFiles - Files with unused exports
  * @param {object} params.security - Security scan results (or null)
  * @param {object} params.tier - License tier info
  * @returns {string} Markdown comment body
  */
-function formatComment({ summary, newDeadFiles, existingDeadFiles, security, tier }) {
+function formatComment({ summary, newDeadFiles, existingDeadFiles, partialFiles = [], security, tier }) {
   const lines = [MARKER];
 
   // Header
@@ -32224,21 +32230,25 @@ function formatComment({ summary, newDeadFiles, existingDeadFiles, security, tie
   if (newDeadFiles.length > 0) {
     lines.push(`### :rotating_light: ${newDeadFiles.length} new dead file${newDeadFiles.length === 1 ? '' : 's'} in this PR`);
     lines.push('');
-    lines.push('| File | Language | Lines | Size | Change |');
-    lines.push('|------|----------|-------|------|--------|');
+    lines.push('| File | Language | Lines | Size | Exports | Change |');
+    lines.push('|------|----------|-------|------|---------|--------|');
 
     for (const f of newDeadFiles.slice(0, 25)) {
       const filePath = f.file || f.path || '';
       const lang = f.language || '—';
       const lns = f.lines || '—';
       const sz = fmtBytes(f.size || 0);
+      const exports = fmtExports(f.exports);
       const change = f.changeStatus === 'A' ? 'Added' : 'Modified';
-      lines.push(`| \`${filePath}\` | ${lang} | ${lns} | ${sz} | ${change} |`);
+      lines.push(`| \`${filePath}\` | ${lang} | ${lns} | ${sz} | ${exports} | ${change} |`);
     }
 
     if (newDeadFiles.length > 25) {
-      lines.push(`| ... and ${newDeadFiles.length - 25} more | | | | |`);
+      lines.push(`| ... and ${newDeadFiles.length - 25} more | | | | | |`);
     }
+    lines.push('');
+
+    lines.push('> Run `npx swynx-lite quarantine` to safely move dead files to `.swynx-quarantine/` (reversible)');
     lines.push('');
   } else {
     lines.push(':sparkles: **No new dead code introduced by this PR.**');
@@ -32250,22 +32260,56 @@ function formatComment({ summary, newDeadFiles, existingDeadFiles, security, tie
     lines.push('<details>');
     lines.push(`<summary>${existingDeadFiles.length} existing dead file${existingDeadFiles.length === 1 ? '' : 's'} (pre-existing)</summary>`);
     lines.push('');
-    lines.push('| File | Language | Lines |');
-    lines.push('|------|----------|-------|');
+    lines.push('| File | Language | Lines | Size | Exports |');
+    lines.push('|------|----------|-------|------|---------|');
 
     for (const f of existingDeadFiles.slice(0, 50)) {
       const filePath = f.file || f.path || '';
       const lang = f.language || '—';
       const lns = f.lines || '—';
-      lines.push(`| \`${filePath}\` | ${lang} | ${lns} |`);
+      const sz = fmtBytes(f.size || 0);
+      const exports = fmtExports(f.exports);
+      lines.push(`| \`${filePath}\` | ${lang} | ${lns} | ${sz} | ${exports} |`);
     }
 
     if (existingDeadFiles.length > 50) {
-      lines.push(`| ... and ${existingDeadFiles.length - 50} more | | |`);
+      lines.push(`| ... and ${existingDeadFiles.length - 50} more | | | | |`);
     }
 
     lines.push('');
     lines.push('</details>');
+    lines.push('');
+  }
+
+  // Partial dead files — files with unused exports (collapsed)
+  if (partialFiles.length > 0) {
+    lines.push('<details>');
+    lines.push(`<summary>${partialFiles.length} file${partialFiles.length === 1 ? '' : 's'} with unused exports</summary>`);
+    lines.push('');
+    lines.push('| File | Unused exports | Total exports |');
+    lines.push('|------|---------------|---------------|');
+
+    for (const f of partialFiles.slice(0, 50)) {
+      const filePath = f.file || f.path || '';
+      const deadExports = (f.deadExports || f.unusedExports || []).map(e => e.name || e).filter(Boolean);
+      const deadList = deadExports.slice(0, 5).map(e => `\`${e}\``).join(', ');
+      const suffix = deadExports.length > 5 ? ` +${deadExports.length - 5} more` : '';
+      const total = f.totalExports || '—';
+      lines.push(`| \`${filePath}\` | ${deadList}${suffix} | ${total} |`);
+    }
+
+    if (partialFiles.length > 50) {
+      lines.push(`| ... and ${partialFiles.length - 50} more | | |`);
+    }
+
+    lines.push('');
+    lines.push('</details>');
+    lines.push('');
+  }
+
+  // Config hint (shown when there are dead files)
+  if (newDeadFiles.length > 0 || existingDeadFiles.length > 0) {
+    lines.push('> :bulb: False positive? Add patterns to `.swynxignore` or use the `exclude` input ([docs](https://swynx.io/docs/github-action))');
     lines.push('');
   }
 
@@ -32354,6 +32398,15 @@ function fmtBytes(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function fmtExports(exports) {
+  if (!exports || !Array.isArray(exports) || exports.length === 0) return '—';
+  const names = exports.map(e => e.name || e).filter(Boolean);
+  if (names.length === 0) return '—';
+  const shown = names.slice(0, 3).map(e => `\`${e}\``).join(', ');
+  if (names.length > 3) return `${shown} +${names.length - 3} more`;
+  return shown;
+}
+
 function severityBadge(severity) {
   const badges = {
     CRITICAL: ':red_circle: CRITICAL',
@@ -32402,7 +32455,7 @@ async function postInlineReviews(token, context, newDeadFiles) {
     comments.push({
       path: filePath,
       position: 1, // First line of the diff hunk
-      body: `:warning: **Dead code detected** — This file was ${changeType} in this PR but is not imported or referenced anywhere in the codebase.${exportList}\n\n*Consider removing this file or adding an import to it.*`,
+      body: `:warning: **Dead code detected** — This file was ${changeType} in this PR but is not imported or referenced anywhere in the codebase.${exportList}\n\n*Quarantine this file with \`npx swynx-lite quarantine\`, or add an import if it's still needed.*`,
     });
   }
 
@@ -32859,6 +32912,7 @@ async function run() {
         summary: results.summary,
         newDeadFiles,
         existingDeadFiles,
+        partialFiles: results.partialFiles || [],
         security: isFeatureAllowed(tier, 'securityFull') ? security : summarizeSecurity(security),
         tier,
       });
