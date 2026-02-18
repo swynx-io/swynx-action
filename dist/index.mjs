@@ -32287,10 +32287,12 @@ function formatComment({ summary, newDeadFiles, existingDeadFiles, partialFiles 
       const filePath = f.file || f.path || '';
       const deadExports = (f.deadExports || f.unusedExports || []).map(e => {
         const name = e.name || e;
+        if (!name) return null;
         const type = e.type ? `${e.type} ` : '';
-        return `${type}${name}`;
+        const line = e.line ? ` (L${e.line})` : '';
+        return `\`${type}${name}\`${line}`;
       }).filter(Boolean);
-      const deadList = deadExports.map(e => `\`${e}\``).join(', ');
+      const deadList = deadExports.join(', ');
       const total = f.totalExports || '—';
       lines.push(`| \`${filePath}\` | ${deadList} | ${total} |`);
     }
@@ -32400,7 +32402,8 @@ function fmtAllExports(exports) {
     const name = e.name || e;
     if (!name) return null;
     const type = e.type ? `${e.type} ` : '';
-    return `\`${type}${name}\``;
+    const line = e.line ? `:${e.line}` : '';
+    return `\`${type}${name}\`${line ? ` (L${e.line})` : ''}`;
   }).filter(Boolean);
   if (formatted.length === 0) return '—';
   return formatted.join(', ');
