@@ -32191,6 +32191,8 @@ function classifyNewDeadCode(deadFiles, changedFiles) {
 
 
 const MARKER = '<!-- swynx-action -->';
+// GitHub caps comment bodies at 65536 chars
+const MAX_BODY_LENGTH = 65000;
 
 /**
  * Format the PR comment body
@@ -32226,28 +32228,24 @@ function formatComment({ summary, newDeadFiles, existingDeadFiles, partialFiles 
   }
   lines.push('');
 
-  // New dead code (prominently displayed)
+  // New dead code (prominently displayed — every file shown)
   if (newDeadFiles.length > 0) {
     lines.push(`### :rotating_light: ${newDeadFiles.length} new dead file${newDeadFiles.length === 1 ? '' : 's'} in this PR`);
     lines.push('');
     lines.push('| File | Language | Lines | Size | Exports | Change |');
     lines.push('|------|----------|-------|------|---------|--------|');
 
-    for (const f of newDeadFiles.slice(0, 25)) {
+    for (const f of newDeadFiles) {
       const filePath = f.file || f.path || '';
       const lang = f.language || '—';
       const lns = f.lines || '—';
       const sz = fmtBytes(f.size || 0);
-      const exports = fmtExports(f.exports);
+      const exports = fmtAllExports(f.exports);
       const change = f.changeStatus === 'A' ? 'Added' : 'Modified';
       lines.push(`| \`${filePath}\` | ${lang} | ${lns} | ${sz} | ${exports} | ${change} |`);
     }
 
-    if (newDeadFiles.length > 25) {
-      lines.push(`| ... and ${newDeadFiles.length - 25} more | | | | | |`);
-    }
     lines.push('');
-
     lines.push('> Run `npx swynx-lite quarantine` to safely move dead files to `.swynx-quarantine/` (reversible)');
     lines.push('');
   } else {
@@ -32255,7 +32253,7 @@ function formatComment({ summary, newDeadFiles, existingDeadFiles, partialFiles 
     lines.push('');
   }
 
-  // Existing dead files (collapsed)
+  // Existing dead files (collapsed — every file shown)
   if (existingDeadFiles.length > 0) {
     lines.push('<details>');
     lines.push(`<summary>${existingDeadFiles.length} existing dead file${existingDeadFiles.length === 1 ? '' : 's'} (pre-existing)</summary>`);
@@ -32263,17 +32261,13 @@ function formatComment({ summary, newDeadFiles, existingDeadFiles, partialFiles 
     lines.push('| File | Language | Lines | Size | Exports |');
     lines.push('|------|----------|-------|------|---------|');
 
-    for (const f of existingDeadFiles.slice(0, 50)) {
+    for (const f of existingDeadFiles) {
       const filePath = f.file || f.path || '';
       const lang = f.language || '—';
       const lns = f.lines || '—';
       const sz = fmtBytes(f.size || 0);
-      const exports = fmtExports(f.exports);
+      const exports = fmtAllExports(f.exports);
       lines.push(`| \`${filePath}\` | ${lang} | ${lns} | ${sz} | ${exports} |`);
-    }
-
-    if (existingDeadFiles.length > 50) {
-      lines.push(`| ... and ${existingDeadFiles.length - 50} more | | | | |`);
     }
 
     lines.push('');
@@ -32281,7 +32275,7 @@ function formatComment({ summary, newDeadFiles, existingDeadFiles, partialFiles 
     lines.push('');
   }
 
-  // Partial dead files — files with unused exports (collapsed)
+  // Partial dead files — files with unused exports (collapsed — every file shown)
   if (partialFiles.length > 0) {
     lines.push('<details>');
     lines.push(`<summary>${partialFiles.length} file${partialFiles.length === 1 ? '' : 's'} with unused exports</summary>`);
@@ -32289,17 +32283,16 @@ function formatComment({ summary, newDeadFiles, existingDeadFiles, partialFiles 
     lines.push('| File | Unused exports | Total exports |');
     lines.push('|------|---------------|---------------|');
 
-    for (const f of partialFiles.slice(0, 50)) {
+    for (const f of partialFiles) {
       const filePath = f.file || f.path || '';
-      const deadExports = (f.deadExports || f.unusedExports || []).map(e => e.name || e).filter(Boolean);
-      const deadList = deadExports.slice(0, 5).map(e => `\`${e}\``).join(', ');
-      const suffix = deadExports.length > 5 ? ` +${deadExports.length - 5} more` : '';
+      const deadExports = (f.deadExports || f.unusedExports || []).map(e => {
+        const name = e.name || e;
+        const type = e.type ? `${e.type} ` : '';
+        return `${type}${name}`;
+      }).filter(Boolean);
+      const deadList = deadExports.map(e => `\`${e}\``).join(', ');
       const total = f.totalExports || '—';
-      lines.push(`| \`${filePath}\` | ${deadList}${suffix} | ${total} |`);
-    }
-
-    if (partialFiles.length > 50) {
-      lines.push(`| ... and ${partialFiles.length - 50} more | | |`);
+      lines.push(`| \`${filePath}\` | ${deadList} | ${total} |`);
     }
 
     lines.push('');
@@ -32313,7 +32306,7 @@ function formatComment({ summary, newDeadFiles, existingDeadFiles, partialFiles 
     lines.push('');
   }
 
-  // Security findings (collapsed)
+  // Security findings (collapsed — every finding shown)
   if (security && security.summary && security.summary.total > 0) {
     lines.push('<details>');
     lines.push(`<summary>:shield: ${security.summary.total} security finding${security.summary.total === 1 ? '' : 's'} in dead code</summary>`);
@@ -32321,14 +32314,9 @@ function formatComment({ summary, newDeadFiles, existingDeadFiles, partialFiles 
     lines.push('| Severity | CWE | File | Line | Description |');
     lines.push('|----------|-----|------|------|-------------|');
 
-    const findings = (security.findings || []).slice(0, 20);
-    for (const f of findings) {
+    for (const f of (security.findings || [])) {
       const sev = severityBadge(f.severity);
       lines.push(`| ${sev} | ${f.cwe} | \`${f.file}\` | ${f.line} | ${f.description || f.cweName} |`);
-    }
-
-    if (security.summary.total > 20) {
-      lines.push(`| ... and ${security.summary.total - 20} more | | | | |`);
     }
 
     lines.push('');
@@ -32345,7 +32333,15 @@ function formatComment({ summary, newDeadFiles, existingDeadFiles, partialFiles 
     lines.push('*Scanned by [Swynx](https://swynx.io) — [Get unlimited features](https://swynx.io/pricing)*');
   }
 
-  return lines.join('\n');
+  let body = lines.join('\n');
+
+  // GitHub has a 65536 char limit on comments — truncate gracefully if needed
+  if (body.length > MAX_BODY_LENGTH) {
+    const truncMsg = '\n\n> :warning: Output truncated — too many findings for a single GitHub comment. Run `npx swynx-lite` locally for the full report.\n';
+    body = body.slice(0, MAX_BODY_LENGTH - truncMsg.length) + truncMsg;
+  }
+
+  return body;
 }
 
 /**
@@ -32398,13 +32394,16 @@ function fmtBytes(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function fmtExports(exports) {
+function fmtAllExports(exports) {
   if (!exports || !Array.isArray(exports) || exports.length === 0) return '—';
-  const names = exports.map(e => e.name || e).filter(Boolean);
-  if (names.length === 0) return '—';
-  const shown = names.slice(0, 3).map(e => `\`${e}\``).join(', ');
-  if (names.length > 3) return `${shown} +${names.length - 3} more`;
-  return shown;
+  const formatted = exports.map(e => {
+    const name = e.name || e;
+    if (!name) return null;
+    const type = e.type ? `${e.type} ` : '';
+    return `\`${type}${name}\``;
+  }).filter(Boolean);
+  if (formatted.length === 0) return '—';
+  return formatted.join(', ');
 }
 
 function severityBadge(severity) {
